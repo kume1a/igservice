@@ -7,10 +7,10 @@ from pathlib import Path
 from instagrapi import Client
 from concurrent import futures
 
-import igapi_pb2
-import igapi_pb2_grpc
+import igservice_pb2
+import igservice_pb2_grpc
 
-class IGAPIServicer(igapi_pb2_grpc.IGAPIServicer):
+class IGAPIServicer(igservice_pb2_grpc.IGServiceServicer):
     def CreateIGTVVideo(self, request, context):
         ig_username = request.igUsername
         ig_password = request.igPassword
@@ -26,7 +26,7 @@ class IGAPIServicer(igapi_pb2_grpc.IGAPIServicer):
           context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
           context.set_details('Missing parameters')
 
-          return igapi_pb2.CreateIGTVVideoResponse()
+          return igservice_pb2.CreateIGTVVideoResponse()
 
         try:
           video_path = f'upload/{time.time()}.mp4'
@@ -44,7 +44,7 @@ class IGAPIServicer(igapi_pb2_grpc.IGAPIServicer):
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details('Invalid ig credentials')
 
-            return igapi_pb2.CreateIGTVVideoResponse()
+            return igservice_pb2.CreateIGTVVideoResponse()
           
           media = cl.igtv_upload(
             Path(video_path), 
@@ -58,19 +58,19 @@ class IGAPIServicer(igapi_pb2_grpc.IGAPIServicer):
           os.remove(video_path)
           os.remove(thumbnail_path)
 
-          return igapi_pb2.CreateIGTVVideoResponse(id=media.id)
+          return igservice_pb2.CreateIGTVVideoResponse(id=media.id)
         except Exception as e:
            print(e)
 
            context.set_code(grpc.StatusCode.INTERNAL)
            context.set_details(str(e))
 
-           return igapi_pb2.CreateIGTVVideoResponse()
+           return igservice_pb2.CreateIGTVVideoResponse()
 
 if __name__ == "__main__":
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=5))
 
-    igapi_pb2_grpc.add_IGAPIServicer_to_server(IGAPIServicer(), server)
+    igservice_pb2_grpc.add_IGServiceServicer_to_server(IGAPIServicer(), server)
 
     server.add_insecure_port('[::]:50051')
     server.start()
