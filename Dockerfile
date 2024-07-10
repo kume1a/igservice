@@ -1,12 +1,15 @@
-FROM ubuntu
+FROM python:3.10-slim
 
 RUN apt update
-RUN apt install python3-pip -y
+RUN apt-get -y install make
 
 WORKDIR /app
 
 COPY . .
 
-RUN make install
+RUN pip install --no-cache-dir -r requirements.txt
+RUN make protogen
+
+EXPOSE 50051
 
 CMD ["make", "run"]

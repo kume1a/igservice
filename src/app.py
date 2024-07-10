@@ -1,6 +1,7 @@
 import grpc
 import urllib.request
 import time
+import os 
 
 from pathlib import Path
 from instagrapi import Client
@@ -52,8 +53,10 @@ class IGAPIServicer(igapi_pb2_grpc.IGAPIServicer):
             Path(thumbnail_path)
           )
 
-          print('Media uploaded successfully!')
-          print(media.id)
+          print(f'Media uploaded successfully!, id: {media.id}')
+
+          os.remove(video_path)
+          os.remove(thumbnail_path)
 
           return igapi_pb2.CreateIGTVVideoResponse(id=media.id)
         except Exception as e:
