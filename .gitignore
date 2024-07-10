@@ -2,5 +2,5 @@ env
 
 __pycache__/
 
-proto/*.py
-!proto/__init__.py
+src/*_pb2.py
+src/*_pb2_grpc.py

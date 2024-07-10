@@ -12,6 +12,7 @@ message CreateIGTVVideoRequest {
   string title = 3;
   string caption = 4;
   string videoURL = 5;
+  string thumbnailURL = 6;
 }
 
 message CreateIGTVVideoResponse {

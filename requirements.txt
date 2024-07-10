@@ -2,3 +2,6 @@ pylint
 ipython
 grpcio
 grpcio-tools
+instagrapi
+pillow
+moviepy
