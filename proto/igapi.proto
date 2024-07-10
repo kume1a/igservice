@@ -1,0 +1,19 @@
+syntax="proto3";
+
+package igclient;
+
+service IGAPI {
+  rpc CreateIGTVVideo(CreateIGTVVideoRequest) returns (CreateIGTVVideoResponse);
+}
+
+message CreateIGTVVideoRequest {
+  string igUsername = 1;
+  string igPassword = 2;
+  string title = 3;
+  string caption = 4;
+  string videoURL = 5;
+}
+
+message CreateIGTVVideoResponse {
+  string id = 1;
+}
