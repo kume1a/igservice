@@ -4,3 +4,5 @@ __pycache__/
 
 src/*_pb2.py
 src/*_pb2_grpc.py
+
+upload
