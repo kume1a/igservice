@@ -10,7 +10,7 @@ from concurrent import futures
 import igservice_pb2
 import igservice_pb2_grpc
 
-class IGAPIServicer(igservice_pb2_grpc.IGServiceServicer):
+class IGServiceServicer(igservice_pb2_grpc.IGServiceServicer):
     def CreateIGTVVideo(self, request, context):
         ig_username = request.igUsername
         ig_password = request.igPassword
@@ -70,7 +70,7 @@ class IGAPIServicer(igservice_pb2_grpc.IGServiceServicer):
 if __name__ == "__main__":
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=5))
 
-    igservice_pb2_grpc.add_IGServiceServicer_to_server(IGAPIServicer(), server)
+    igservice_pb2_grpc.add_IGServiceServicer_to_server(IGServiceServicer(), server)
 
     server.add_insecure_port('[::]:50051')
     server.start()

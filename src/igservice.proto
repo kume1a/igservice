@@ -2,7 +2,7 @@ syntax="proto3";
 
 package igclient;
 
-service IGAPI {
+service IGService {
   rpc CreateIGTVVideo(CreateIGTVVideoRequest) returns (CreateIGTVVideoResponse);
 }
 

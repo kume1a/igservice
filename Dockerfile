@@ -12,4 +12,6 @@ RUN make protogen
 
 EXPOSE 50051
 
+# ENTRYPOINT ["tail", "-f", "/dev/null"]
+
 CMD ["make", "run"]
