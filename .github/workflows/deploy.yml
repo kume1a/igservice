@@ -84,4 +84,5 @@ jobs:
             docker run -t -d \
               --net=host \
               --name igservice \
+              --volume /app/uploads=/root/igservice_uploads \
               ghcr.io/kume1a/igservice:main
