@@ -7,8 +7,7 @@ from pathlib import Path
 from instagrapi import Client
 from concurrent import futures
 
-import igservice_pb2
-import igservice_pb2_grpc
+from proto import igservice_pb2, igservice_pb2_grpc
 
 class IGServiceServicer(igservice_pb2_grpc.IGServiceServicer):
     def CreateIGTVVideo(self, request, context):
@@ -72,6 +71,11 @@ if __name__ == "__main__":
 
     igservice_pb2_grpc.add_IGServiceServicer_to_server(IGServiceServicer(), server)
 
-    server.add_insecure_port('[::]:50051')
+    port = os.getenv('PORT', 50051)
+
+    server.add_insecure_port(f'[::]:{port}')
     server.start()
+
+    print(f'Server started at port {port}')
+    
     server.wait_for_termination()
