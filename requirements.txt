@@ -1,6 +1,7 @@
 pylint
-grpcio
-grpcio-tools
 instagrapi
 pillow
 moviepy
+flask
+waitress
+python-dotenv

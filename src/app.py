@@ -1,81 +1,82 @@
-import grpc
 import urllib.request
 import time
 import os 
 
 from pathlib import Path
 from instagrapi import Client
-from concurrent import futures
+from waitress import serve
+from flask import Flask, request
+from dotenv import dotenv_values
 
-from proto import igservice_pb2, igservice_pb2_grpc
+config = {
+    **dotenv_values(".env.local"),
+    **os.environ,
+}
 
-class IGServiceServicer(igservice_pb2_grpc.IGServiceServicer):
-    def CreateIGTVVideo(self, request, context):
-        ig_username = request.igUsername
-        ig_password = request.igPassword
-        video_url = request.videoURL
-        title = request.title
-        caption = request.caption
-        thumbnail_url = request.thumbnailURL
+app = Flask(__name__)
 
-        if not ig_username or not ig_password or not video_url \
-           or not title or not caption or not thumbnail_url:
-          print('Invalid request, missing parameters')
+def validate_secret():
+    env_secret = os.getenv('SECRET')
+    request_secret = request.headers.get('X-Secret')
 
-          context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-          context.set_details('Missing parameters')
+    if not env_secret:
+        raise ValueError('Missing SECRET env variable')
+    
+    return request_secret == env_secret
 
-          return igservice_pb2.CreateIGTVVideoResponse()
+@app.route("/uploadIGTVVideo", methods=['POST'])
+def upload_igtv_video():
+    if not validate_secret():
+        return 'Invalid secret', 401
 
-        try:
-          video_path = f'upload/{time.time()}.mp4'
-          thumbnail_path = f'upload/{time.time()}.jpg'
+    body = request.get_json(silent=True)
 
-          urllib.request.urlretrieve(request.videoURL, video_path)
-          urllib.request.urlretrieve(request.thumbnailURL,  thumbnail_path)
+    if not body:
+        return 'Invalid request or missing body', 400
+    
+    ig_username = body.get('igUsername')
+    ig_password = body.get('igPassword')
+    video_url = body.get('videoURL')
+    title = body.get('title')
+    caption = body.get('caption')
+    thumbnail_url = body.get('thumbnailURL')
 
-          cl = Client()
-          success = cl.login(ig_username, ig_password)
+    if not ig_username or not ig_password or not video_url \
+       or not title or not caption or not thumbnail_url:
+        return 'Invalid request, missing parameters', 400
+    
+    try:
+        video_path = f'upload/{time.time()}.mp4'
+        thumbnail_path = f'upload/{time.time()}.jpg'
 
-          if not success:
-            print('Invalid ig credentials, login failed')
+        urllib.request.urlretrieve(request.videoURL, video_path)
+        urllib.request.urlretrieve(request.thumbnailURL,  thumbnail_path)
 
-            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details('Invalid ig credentials')
+        cl = Client()
+        success = cl.login(ig_username, ig_password)
 
-            return igservice_pb2.CreateIGTVVideoResponse()
-          
-          media = cl.igtv_upload(
-            Path(video_path), 
-            request.title, 
-            request.caption,
-            Path(thumbnail_path)
-          )
+        if not success:
+          print('Invalid ig credentials, login failed')
 
-          print(f'Media uploaded successfully!, id: {media.id}')
+          return 'Invalid ig credentials', 400
 
-          os.remove(video_path)
-          os.remove(thumbnail_path)
+        media = cl.igtv_upload(
+          Path(video_path), 
+          request.title, 
+          request.caption,
+          Path(thumbnail_path)
+        )
 
-          return igservice_pb2.CreateIGTVVideoResponse(id=media.id)
-        except Exception as e:
-           print(e)
+        print(f'Media uploaded successfully!, id: {media.id}')
 
-           context.set_code(grpc.StatusCode.INTERNAL)
-           context.set_details(str(e))
+        os.remove(video_path)
+        os.remove(thumbnail_path)
 
-           return igservice_pb2.CreateIGTVVideoResponse()
+        return media.id
+    except Exception as e:
+        print(e)
+
+        return str(e), 500
 
 if __name__ == "__main__":
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=5))
-
-    igservice_pb2_grpc.add_IGServiceServicer_to_server(IGServiceServicer(), server)
-
-    port = os.getenv('PORT', 50051)
-
-    server.add_insecure_port(f'[::]:{port}')
-    server.start()
-
-    print(f'Server started at port {port}')
-    
-    server.wait_for_termination()
+    serve(app, host="0.0.0.0", port=8080)
