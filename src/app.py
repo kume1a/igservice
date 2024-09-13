@@ -101,7 +101,9 @@ def upload_igtv_video():
         if thumbnail_path:
           os.remove(thumbnail_path)
 
-        return media.id
+        return {
+            'mediaId': media.id
+        }
     except Exception as e:
         print(e)
 
