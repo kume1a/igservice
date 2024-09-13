@@ -31,7 +31,7 @@ def test():
     if not validate_secret():
         return 'Invalid secret', 401
     
-    body = request.get_json(silent=True)
+    body = request.get_json()
 
     if not body:
         return 'Invalid request or missing body', 400
@@ -49,7 +49,7 @@ def test():
         return 'Invalid ig credentials', 400
     
     return {
-        'sessionId': c.session_id
+        'sessionId': c.sessionid
     }
 
 @app.route("/uploadIGTVVideo", methods=['POST'])
@@ -57,7 +57,7 @@ def upload_igtv_video():
     if not validate_secret():
         return 'Invalid secret', 401
 
-    body = request.get_json(silent=True)
+    body = request.get_json()
 
     if not body:
         return 'Invalid request or missing body', 400
