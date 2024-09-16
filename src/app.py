@@ -63,9 +63,9 @@ def upload_igtv_video():
         return 'Invalid request or missing body', 400
 
     session_id = body.get('sessionId')
-    video_url = body.get('videoURL')
     title = body.get('title')
     caption = body.get('caption')
+    video_url = body.get('videoURL')
     thumbnail_url = body.get('thumbnailURL')
 
     if not session_id or not video_url \
