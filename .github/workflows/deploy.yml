@@ -84,7 +84,7 @@ jobs:
             docker run -t -d \
               --net=host \
               --name igservice \
-              --volume /app/upload=/root/igservice_upload \
+              --volume /app/upload=/home/toko/dev/brainrot_factory/igservice/upload \
               -e "SECRET=${{ secrets.SECRET }}" \
               -p 8080:8080 \
               ghcr.io/kume1a/igservice:main
