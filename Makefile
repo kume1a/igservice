@@ -10,3 +10,9 @@ debug:
 
 run:
 	waitress-serve src.app:app
+
+activate:
+	source venv/bin/activate
+
+venv:
+	python3 -m venv venv
