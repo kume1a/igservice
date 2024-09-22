@@ -86,4 +86,5 @@ jobs:
               --name igservice \
               --volume /app/upload=/root/igservice_upload \
               -e "SECRET=${{ secrets.SECRET }}" \
+              -p 8080:8080 \
               ghcr.io/kume1a/igservice:main
