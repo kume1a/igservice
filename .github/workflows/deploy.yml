@@ -82,7 +82,6 @@ jobs:
             docker pull ghcr.io/kume1a/igservice:main
 
             docker run -t -d \
-              --net=host \
               --name igservice \
               --volume /app/upload=/home/toko/dev/brainrot_factory/igservice/upload \
               -e "SECRET=${{ secrets.SECRET }}" \
