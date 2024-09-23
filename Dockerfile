@@ -10,7 +10,7 @@ COPY . .
 RUN pip install --no-cache-dir -r requirements.txt
 RUN mkdir upload
 
-EXPOSE 8081
+EXPOSE 8080
 
 # ENTRYPOINT ["tail", "-f", "/dev/null"]
 
