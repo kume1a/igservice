@@ -86,5 +86,5 @@ jobs:
               --name igservice \
               --volume /app/upload=/home/toko/dev/brainrot_factory/igservice/upload \
               -e "SECRET=${{ secrets.SECRET }}" \
-              -p 8080:8080 \
+              -p 8081:8081 \
               ghcr.io/kume1a/igservice:main
