@@ -14,4 +14,7 @@ EXPOSE 8080
 
 # ENTRYPOINT ["tail", "-f", "/dev/null"]
 
-CMD ["make", "run"]
+COPY dockerentrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
