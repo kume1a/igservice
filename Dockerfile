@@ -1,20 +1,20 @@
-FROM python:3.10-slim
+FROM python:3.14-slim
 
-RUN apt update
-RUN apt-get -y install make
+RUN apt-get update && apt-get -y install --no-install-recommends make dos2unix \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY . .
-
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-RUN mkdir upload
+
+COPY . .
+RUN mkdir -p upload
 
 EXPOSE 8080
 
+RUN dos2unix ./dockerentrypoint.sh && chmod +x ./dockerentrypoint.sh
+
 # ENTRYPOINT ["tail", "-f", "/dev/null"]
 
-COPY dockerentrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["./dockerentrypoint.sh"]
