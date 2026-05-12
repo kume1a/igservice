@@ -60,15 +60,36 @@ docker run -p 8080:8080 --env SECRET=your-secret-key igservice
 
 All endpoints require an `X-Secret` header matching the configured `SECRET`.
 
-### POST /accountInfo
+### POST /login
 
-Fetch Instagram account info from an existing session ID.
+Log in with Instagram credentials and get back an `instagrapi` settings blob (device + cookies + uuids). Reuse it on subsequent calls instead of logging in repeatedly — Instagram blacklists IPs that do password logins from datacenters. Run this once from a residential/mobile IP, save the response, and pass `settings` to the other routes.
 
 **Request:**
 
 ```json
 {
-  "sessionId": "..."
+  "igUsername": "your_username",
+  "igPassword": "your_password"
+}
+```
+
+**Response:**
+
+```json
+{
+  "settings": { "cookies": { "...": "..." }, "device_settings": { "...": "..." }, "uuids": { "...": "..." }, "user_agent": "...", "authorization_data": { "...": "..." }, "last_login": 0 }
+}
+```
+
+### POST /accountInfo
+
+Fetch Instagram account info from a saved settings blob.
+
+**Request:**
+
+```json
+{
+  "settings": { "...": "..." }
 }
 ```
 
@@ -83,13 +104,13 @@ Fetch Instagram account info from an existing session ID.
 
 ### POST /uploadIGTVVideo
 
-Upload an IGTV video using a session ID.
+Upload an IGTV video using a saved settings blob.
 
 **Request:**
 
 ```json
 {
-  "sessionId": "...",
+  "settings": { "...": "..." },
   "title": "Video Title",
   "caption": "Video caption",
   "videoURL": "https://example.com/video.mp4",

@@ -1,6 +1,6 @@
 # IG Service — API Documentation
 
-A small Flask service that wraps [`instagrapi`](https://github.com/subzeroid/instagrapi) to expose two HTTP endpoints: one to fetch Instagram account info from a session id, and one to upload an IGTV video using a previously obtained session id.
+A small Flask service that wraps [`instagrapi`](https://github.com/subzeroid/instagrapi) to expose three HTTP endpoints: one to log in with Instagram credentials and obtain a reusable settings blob, one to fetch account info from that blob, and one to upload an IGTV video using that blob.
 
 - **Framework:** Flask (served by Waitress)
 - **Base URL:** `http://{HOST}:{PORT}` (defaults: `localhost:8080`)
@@ -14,7 +14,8 @@ A small Flask service that wraps [`instagrapi`](https://github.com/subzeroid/ins
 ```
 src/
   app.py                  # Flask app factory + Waitress entry point
-  config.py               # env-driven configuration
+  config.py               # env-driven configuration (SECRET, HOST, PORT)
+  constant.py             # fixed constants (UPLOAD_DIR)
   auth.py                 # X-Secret blueprint hook
   routes.py               # thin Flask route handlers
   services/
@@ -27,82 +28,109 @@ The routes layer parses requests, calls into `services/instagram.py`, and serial
 
 ---
 
-## Authentication
+## Auth model
 
-Every request to every endpoint is gated by a shared-secret check defined in [src/auth.py](src/auth.py) and registered as the blueprint's `before_request` hook in [src/routes.py](src/routes.py).
+Every endpoint is gated by a shared-secret header check defined in [src/auth.py](src/auth.py).
 
 | Header | Required | Description |
 | --- | --- | --- |
-| `X-Secret` | Yes | Must equal the `SECRET` environment variable. Compared with `hmac.compare_digest` to prevent timing attacks. |
+| `X-Secret` | Yes | Must equal the `SECRET` env var. Compared with `hmac.compare_digest`. |
 
-### Auth failure modes
-
-| Condition | Status | Response body |
+| Condition | Status | Body |
 | --- | --- | --- |
-| `SECRET` env var is not configured on the server | `500` | `{"error": "Server misconfiguration"}` |
-| `X-Secret` header missing or wrong | `401` | `{"error": "Invalid secret"}` |
+| `SECRET` not configured server-side | `500` | `{"error": "Server misconfiguration"}` |
+| `X-Secret` missing or wrong | `401` | `{"error": "Invalid secret"}` |
 
-> Note: the auth check runs before *every* route in the `api` blueprint, including any future endpoints. There is no public/unauthenticated endpoint.
+---
+
+## Instagram auth model: `settings`
+
+This service does **not** ask for `sessionId`. Instead, `/login` returns a full `instagrapi` settings blob (cookies + device fingerprint + UUIDs + user-agent + authorization headers), and the other two routes accept that blob as a `settings` field.
+
+Why: Instagram aggressively invalidates sessions when the device fingerprint changes between calls. Reusing the same settings blob means every subsequent request looks like the same "device" to Instagram, which dramatically reduces session bumps and challenge prompts.
+
+**Operational note:** password logins from datacenter IPs are routinely blocked by Instagram (`ChallengeRequired`). Run `/login` from a residential/mobile IP (your laptop, a phone-tethered machine, or via a residential proxy). After that, the saved settings blob can be used from any IP — but ideally from a stable one.
+
+The blob is opaque to the client; treat it as a single credential. Do not edit it. Persist it like a password.
 
 ---
 
 ## Configuration
 
-Configuration is read in [src/config.py](src/config.py) from `.env.local` first, with real process environment variables overriding file values.
+Read in [src/config.py](src/config.py) from `.env.local` first, real env vars override.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `SECRET` | *(unset — required)* | Shared secret expected in the `X-Secret` header. Service returns `500` on every request if this is unset. |
-| `UPLOAD_DIR` | `upload` | Directory used to stage downloaded video/thumbnail files before uploading to Instagram. Created on app start. |
-| `HOST` | `localhost` | Bind address for the Waitress server. |
-| `PORT` | `8080` | Bind port for the Waitress server. |
+| `SECRET` | *(required)* | Shared secret expected in `X-Secret`. |
+| `HOST` | *(required)* | Bind address. |
+| `PORT` | *(required)* | Bind port. |
+
+`UPLOAD_DIR` (default `./upload`) is a constant in [src/constant.py](src/constant.py).
 
 ---
 
 ## Endpoints
 
-### 1. `POST /accountInfo`
+### 1. `POST /login`
 
-Authenticates with an existing Instagram session id and returns the user id plus the full `account_info()` payload.
-
-Defined in [src/routes.py](src/routes.py).
+Log in with Instagram username + password and return a settings blob you can persist and pass to other endpoints.
 
 #### Request
 
-**Headers**
-
-| Header | Value |
-| --- | --- |
-| `X-Secret` | the configured server secret |
-| `Content-Type` | `application/json` |
-
-**Body**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `sessionId` | string | Yes | A valid `instagrapi` session id. |
-
-**Example**
-
-```http
-POST /accountInfo HTTP/1.1
-Host: localhost:8080
-Content-Type: application/json
-X-Secret: my-shared-secret
-
+```json
 {
-  "sessionId": "1234567890%3Aabcdef%3A12"
+  "igUsername": "your_username",
+  "igPassword": "your_password"
 }
 ```
 
-#### Response
+#### Response — `200 OK`
 
-**`200 OK`**
+```json
+{
+  "settings": {
+    "cookies": { "...": "..." },
+    "device_settings": { "...": "..." },
+    "uuids": { "...": "..." },
+    "user_agent": "...",
+    "authorization_data": { "...": "..." },
+    "last_login": 0
+  }
+}
+```
+
+The shape comes from `instagrapi.Client.get_settings()`. Save it as-is.
+
+#### Errors
+
+| Status | Body | When |
+| --- | --- | --- |
+| `400` | `{"error": "Missing required fields: <names>"}` | `igUsername` or `igPassword` missing/empty. |
+| `401` | `{"error": "Invalid Instagram username or password"}` | `BadPassword` from instagrapi. |
+| `401` | `{"error": "Two-factor authentication is enabled on this account; not supported."}` | `TwoFactorRequired`. |
+| `401` | `{"error": "Login failed: ..."}` | Any other instagrapi exception. |
+| `403` | `{"error": "Instagram demanded a checkpoint/challenge. ..."}` | `ChallengeRequired` — almost always an IP-reputation issue. Run from a residential/mobile IP. |
+
+---
+
+### 2. `POST /accountInfo`
+
+Fetch the authenticated account's profile info using a saved settings blob.
+
+#### Request
+
+```json
+{
+  "settings": { "...": "..." }
+}
+```
+
+#### Response — `200 OK`
 
 ```json
 {
   "userId": "1234567890",
-  "account": { "...": "instagrapi Account model serialized to JSON" }
+  "account": { "...": "instagrapi Account model serialised to JSON" }
 }
 ```
 
@@ -110,48 +138,29 @@ X-Secret: my-shared-secret
 
 | Status | Body | When |
 | --- | --- | --- |
-| `400` | `{"error": "Missing sessionId"}` | `sessionId` is missing or empty. |
-| `401` | `{"error": "Invalid Instagram credentials"}` / `{"error": "Failed to authenticate with sessionId"}` | The session id was rejected by Instagram, or `login_by_sessionid` raised. |
-| `500` | `{"error": "Failed to fetch account info"}` | Login succeeded but `account_info()` raised. |
-| `401` / `500` | see [Authentication](#authentication) | Auth or server-config errors short-circuit before reaching this route. |
+| `400` | `{"error": "Missing settings"}` | `settings` missing or empty. |
+| `400` | `{"error": "Invalid settings payload"}` | `Client.set_settings(...)` rejected the dict. |
+| `500` | `{"error": "Failed to fetch account info"}` | `account_info()` raised (expired session, network, etc.). |
 
 ---
 
-### 2. `POST /uploadIGTVVideo`
+### 3. `POST /uploadIGTVVideo`
 
-Uploads a video to IGTV using an existing Instagram session id. Both the video and the (optional) thumbnail are downloaded from URLs you provide, streamed to a temporary file inside `UPLOAD_DIR`, posted to Instagram, then cleaned up — successful or not — by the `download_to_temp` context manager in [src/utils/downloads.py](src/utils/downloads.py).
-
-Defined in [src/routes.py](src/routes.py); upload logic in [src/services/instagram.py](src/services/instagram.py).
+Upload a video to IGTV using a saved settings blob. Video (and optional thumbnail) are downloaded from URLs you provide into a temp file under `UPLOAD_DIR`, uploaded, then cleaned up — successful or not — by the `download_to_temp` context manager in [src/utils/downloads.py](src/utils/downloads.py).
 
 #### Request
 
-**Headers**
-
-| Header | Value |
-| --- | --- |
-| `X-Secret` | the configured server secret |
-| `Content-Type` | `application/json` |
-
-**Body**
-
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `sessionId` | string | Yes | A valid `instagrapi` session id. |
+| `settings` | object | Yes | Settings blob from `/login`. |
 | `title` | string | Yes | IGTV title. |
 | `caption` | string | Yes | IGTV caption. |
-| `videoURL` | string | Yes | HTTP(S) URL to the source video. Downloaded with `urllib.request.urlretrieve`. Non-`http`/`https` schemes (`file://`, `ftp://`, etc.) are rejected to mitigate SSRF. |
-| `thumbnailURL` | string | No | HTTP(S) URL to a thumbnail image. If omitted, IGTV is uploaded without a custom thumbnail. Same scheme validation as `videoURL`. |
+| `videoURL` | string | Yes | HTTP(S) URL to the video. Non-`http(s)` schemes are rejected (SSRF guard). |
+| `thumbnailURL` | string | No | HTTP(S) URL to a thumbnail image. |
 
-**Example**
-
-```http
-POST /uploadIGTVVideo HTTP/1.1
-Host: localhost:8080
-Content-Type: application/json
-X-Secret: my-shared-secret
-
+```json
 {
-  "sessionId": "1234567890%3Aabcdef%3A12",
+  "settings": { "...": "..." },
   "title": "My IGTV title",
   "caption": "Caption text with #hashtags",
   "videoURL": "https://example.com/video.mp4",
@@ -159,77 +168,64 @@ X-Secret: my-shared-secret
 }
 ```
 
-#### Response
-
-**`200 OK`**
+#### Response — `200 OK`
 
 ```json
-{
-  "mediaId": "3201234567890123456_12345678"
-}
+{ "mediaId": "3201234567890123456_12345678" }
 ```
-
-`mediaId` is the Instagram media identifier returned by `client.igtv_upload(...)`.
 
 #### Errors
 
 | Status | Body | When |
 | --- | --- | --- |
-| `400` | `{"error": "Missing required fields: <names>"}` | One or more of `sessionId`, `title`, `caption`, `videoURL` is missing or empty. `thumbnailURL` is *not* part of this check. |
-| `400` | `{"error": "Invalid Instagram credentials"}` | `login_by_sessionid` returned falsy or raised. |
-| `500` | `{"error": "Upload failed"}` | Catches **any** exception thrown during URL download or upload. Concrete details are logged server-side via `logger.exception(...)` but intentionally not exposed to the client. |
-| `401` / `500` | see [Authentication](#authentication) | Auth or server-config errors short-circuit before reaching this route. |
+| `400` | `{"error": "Missing required fields: <names>"}` | One of `settings`, `title`, `caption`, `videoURL` missing. |
+| `400` | `{"error": "Invalid settings payload"}` | `Client.set_settings(...)` rejected the dict. |
+| `500` | `{"error": "Upload failed"}` | Any exception during download, login, or upload. Logged server-side. |
 
-#### Side effects & lifecycle
+#### Lifecycle
 
-1. `UPLOAD_DIR` is created at app startup.
-2. The video URL is downloaded to a temp file (`.mp4` suffix) inside `UPLOAD_DIR` via `download_to_temp`.
-3. If `thumbnailURL` is provided, it is downloaded to a temp file (`.jpg` suffix) in the same directory via `maybe_download_to_temp`.
-4. `instagrapi.Client.login_by_sessionid(sessionId)` is called.
-5. `client.igtv_upload(video_path, title, caption, thumbnail=...)` performs the upload.
-6. On context exit (success **or** error), both temp files are removed. Failures during removal are logged but not propagated.
+1. Settings blob → fresh `Client` via `set_settings`.
+2. Video URL → temp `.mp4` in `UPLOAD_DIR` via `download_to_temp`.
+3. If `thumbnailURL` given, thumbnail → temp `.jpg` via `maybe_download_to_temp`.
+4. `client.igtv_upload(...)`.
+5. On context exit (success **or** error), both temp files are removed.
 
 ---
 
 ## Error response shape
 
-All error responses share a single JSON shape:
-
 ```json
 { "error": "<human-readable message>" }
 ```
 
-There is no error code field, no nested structure, and no per-field validation array — only `error`. Clients should branch on HTTP status, not on message text (messages may change).
+Branch on HTTP status, not on message text.
 
 ---
 
-## Status code summary
+## Status codes
 
-| Status | Meaning in this service |
+| Status | Meaning |
 | --- | --- |
-| `200` | Operation succeeded. |
-| `400` | Bad input — missing body, missing required field, or rejected Instagram credentials on upload. |
-| `401` | Missing/wrong `X-Secret` header, or session id rejected by Instagram (on `/accountInfo`). |
-| `500` | Server is misconfigured (no `SECRET`), or an unexpected error occurred during upload / account fetch. |
+| `200` | OK. |
+| `400` | Bad input (missing field, invalid settings blob). |
+| `401` | Missing/wrong `X-Secret`, or Instagram rejected credentials during `/login`. |
+| `403` | Instagram demanded a challenge during `/login` — IP reputation problem. |
+| `500` | Server misconfigured, or unexpected error during upload / account fetch. |
 
 ---
 
-## Running the service
-
-From the repository root:
+## Running
 
 ```bash
 python -m src.app
 ```
 
-`src/app.py` creates the Flask app, registers the `api` blueprint, ensures `UPLOAD_DIR` exists, and serves with Waitress on `HOST:PORT`.
-
 ---
 
 ## Security notes
 
-- **Always set `SECRET`** to a high-entropy value and keep it out of source control. Without it the service returns `500` on every request.
-- **Terminate TLS in front** of this service (reverse proxy / load balancer). The `X-Secret` header is sent in plaintext; without HTTPS, anyone on the network path can capture it and impersonate the caller.
-- **Treat `sessionId` like a password.** It grants account access until Instagram invalidates the session.
-- **SSRF surface is limited but not zero.** URL scheme is restricted to `http`/`https`, but internal IP ranges are not blocked. Don't expose this service to untrusted callers if it sits on a network with sensitive internal HTTP services.
-- **Temp files are best-effort cleaned.** A crash inside the `with` block (e.g. SIGKILL) can leave files in `UPLOAD_DIR`. Operators should monitor disk usage.
+- **Set `SECRET`** to a high-entropy value and keep it out of source control.
+- **Terminate TLS in front** of this service. The `X-Secret` header and the settings blob both travel in the request body/headers — anyone on the wire can replay them.
+- **Treat the settings blob like a password.** It contains live session cookies + the device fingerprint Instagram has whitelisted; whoever holds it can act on the account.
+- **SSRF surface** is limited: only `http`/`https` URL schemes are accepted. Internal IP ranges are *not* blocked.
+- **Don't run `/login` from a datacenter IP** — Instagram will issue a checkpoint. Run it from residential/mobile network (or via a residential proxy), persist the blob, then use the other endpoints normally.

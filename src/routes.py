@@ -6,7 +6,9 @@ from src.auth import require_shared_secret
 from src.constant import UPLOAD_DIR
 from src.services.instagram import (
     InstagramAuthError,
-    login_with_session_id,
+    InstagramChallengeError,
+    client_from_settings,
+    login_with_credentials,
     upload_igtv,
 )
 from src.utils.downloads import download_to_temp, maybe_download_to_temp
@@ -21,17 +23,34 @@ def _missing_fields(body: dict, fields: tuple[str, ...]) -> list[str]:
     return [f for f in fields if not body.get(f)]
 
 
+@api.route("/login", methods=["POST"])
+def login():
+    body = request.get_json(silent=True) or {}
+    missing = _missing_fields(body, ("igUsername", "igPassword"))
+    if missing:
+        return jsonify({"error": f"Missing required fields: {', '.join(missing)}"}), 400
+
+    try:
+        settings = login_with_credentials(body["igUsername"], body["igPassword"])
+    except InstagramChallengeError as e:
+        return jsonify({"error": str(e)}), 403
+    except InstagramAuthError as e:
+        return jsonify({"error": str(e)}), 401
+
+    return jsonify({"settings": settings})
+
+
 @api.route("/accountInfo", methods=["POST"])
 def account_info():
     body = request.get_json(silent=True) or {}
-    session_id = body.get("sessionId")
-    if not session_id:
-        return jsonify({"error": "Missing sessionId"}), 400
+    settings = body.get("settings")
+    if not settings:
+        return jsonify({"error": "Missing settings"}), 400
 
     try:
-        client = login_with_session_id(session_id)
+        client = client_from_settings(settings)
     except InstagramAuthError as e:
-        return jsonify({"error": str(e)}), 401
+        return jsonify({"error": str(e)}), 400
 
     try:
         info = client.account_info()
@@ -48,14 +67,14 @@ def account_info():
 @api.route("/uploadIGTVVideo", methods=["POST"])
 def upload_igtv_video():
     body = request.get_json(silent=True) or {}
-    missing = _missing_fields(body, ("sessionId", "title", "caption", "videoURL"))
+    missing = _missing_fields(body, ("settings", "title", "caption", "videoURL"))
     if missing:
         return jsonify({"error": f"Missing required fields: {', '.join(missing)}"}), 400
 
     try:
-        client = login_with_session_id(body["sessionId"])
-    except InstagramAuthError:
-        return jsonify({"error": "Invalid Instagram credentials"}), 400
+        client = client_from_settings(body["settings"])
+    except InstagramAuthError as e:
+        return jsonify({"error": str(e)}), 400
 
     try:
         with download_to_temp(body["videoURL"], ".mp4", UPLOAD_DIR) as video, \
