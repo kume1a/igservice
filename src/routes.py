@@ -8,6 +8,7 @@ from src.services.instagram import (
     InstagramAuthError,
     InstagramChallengeError,
     client_from_settings,
+    client_from_sessionid,
     login_with_credentials,
     upload_igtv,
 )
@@ -43,12 +44,12 @@ def login():
 @api.route("/accountInfo", methods=["POST"])
 def account_info():
     body = request.get_json(silent=True) or {}
-    settings = body.get("settings")
-    if not settings:
-        return jsonify({"error": "Missing settings"}), 400
+    sessionid = body.get("sessionid")
+    if not sessionid:
+        return jsonify({"error": "Missing sessionid"}), 400
 
     try:
-        client = client_from_settings(settings)
+        client = client_from_sessionid(sessionid)
     except InstagramAuthError as e:
         return jsonify({"error": str(e)}), 400
 
@@ -67,12 +68,12 @@ def account_info():
 @api.route("/uploadIGTVVideo", methods=["POST"])
 def upload_igtv_video():
     body = request.get_json(silent=True) or {}
-    missing = _missing_fields(body, ("settings", "title", "caption", "videoURL"))
+    missing = _missing_fields(body, ("sessionid", "title", "caption", "videoURL"))
     if missing:
         return jsonify({"error": f"Missing required fields: {', '.join(missing)}"}), 400
 
     try:
-        client = client_from_settings(body["settings"])
+        client = client_from_sessionid(body["sessionid"])
     except InstagramAuthError as e:
         return jsonify({"error": str(e)}), 400
 

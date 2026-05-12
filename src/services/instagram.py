@@ -57,6 +57,16 @@ def client_from_settings(settings: dict[str, Any]) -> Client:
         raise InstagramAuthError("Invalid settings payload") from exc
     return client
 
+def client_from_sessionid(sessionid: str) -> Client:
+    """Build a Client from a settings dict (as returned by /login)."""
+    client = Client()
+    try:
+        client.login_by_sessionid(sessionid)
+    except Exception as exc:
+        logger.exception("login_by_sessionid raised")
+        raise InstagramAuthError("Invalid sessionid payload") from exc
+    return client
+
 
 def upload_igtv(
     client: Client,
