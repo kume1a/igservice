@@ -60,16 +60,15 @@ docker run -p 8080:8080 --env SECRET=your-secret-key igservice
 
 All endpoints require an `X-Secret` header matching the configured `SECRET`.
 
-### POST /getSessionId
+### POST /accountInfo
 
-Get an Instagram session ID by logging in with credentials.
+Fetch Instagram account info from an existing session ID.
 
 **Request:**
 
 ```json
 {
-  "igUsername": "your_username",
-  "igPassword": "your_password"
+  "sessionId": "..."
 }
 ```
 
@@ -77,7 +76,8 @@ Get an Instagram session ID by logging in with credentials.
 
 ```json
 {
-  "sessionId": "..."
+  "userId": "...",
+  "account": { "...": "..." }
 }
 ```
 
