@@ -48,6 +48,39 @@ def get_session_id():
     return jsonify({"sessionId": client.sessionid})
 
 
+@api.route("/accountInfo", methods=["POST"])
+def account_info():
+    body = request.get_json(silent=True)
+    if not body:
+        return jsonify({"error": "Invalid request or missing body"}), 400
+
+    session_id = body.get("sessionId")
+    if not session_id:
+        return jsonify({"error": "Missing sessionId"}), 400
+
+    client = Client()
+    try:
+        success = client.login_by_sessionid(session_id)
+    except Exception:
+        logger.exception("login_by_sessionid raised")
+        return jsonify({"error": "Failed to authenticate with sessionId"}), 401
+
+    if not success:
+        return jsonify({"error": "Invalid sessionId"}), 401
+
+    try:
+        user_id = client.user_id
+        info = client.account_info()
+    except Exception:
+        logger.exception("Failed to fetch account info")
+        return jsonify({"error": "Failed to fetch account info"}), 500
+
+    return jsonify({
+        "userId": str(user_id),
+        "account": info.model_dump(mode="json"),
+    })
+
+
 @api.route("/uploadIGTVVideo", methods=["POST"])
 def upload_igtv_video():
     body = request.get_json(silent=True)

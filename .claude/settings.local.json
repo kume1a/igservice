@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:subzeroid.github.io)",
+      "PowerShell(curl.exe -s \"https://proxylist.geonode.com/api/proxy-list?limit=500&page=1&sort_by=lastChecked&sort_type=desc\" -o \"$env:TEMP\\\\proxies.json\"; \\(Get-Item \"$env:TEMP\\\\proxies.json\"\\).Length)"
+    ]
+  }
+}
