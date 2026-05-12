@@ -3,7 +3,7 @@ import logging
 from flask import Blueprint, jsonify, request
 
 from src.auth import require_shared_secret
-from src.config import UPLOAD_DIR
+from src.constant import UPLOAD_DIR
 from src.services.instagram import (
     InstagramAuthError,
     login_with_session_id,

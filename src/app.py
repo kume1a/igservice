@@ -4,8 +4,9 @@ import os
 from flask import Flask
 from waitress import serve
 
-from src.config import HOST, PORT, UPLOAD_DIR
+from src.config import HOST, PORT
 from src.routes import api
+from src.constant import UPLOAD_DIR
 
 
 def create_app() -> Flask:
